@@ -153,9 +153,10 @@
 		visited every tile it can reach, so try not to path to the impossible.
 	
 """
-extends Reference
+extends RefCounted
+class_name HexGrid
 
-var HexCell = preload("./HexCell.gd")
+#var HexCell = preload("./HexCell.gd")
 # Duplicate these from HexCell for ease of access
 const DIR_N = Vector3(0, 1, -1)
 const DIR_NE = Vector3(1, 0, -1)
@@ -166,7 +167,7 @@ const DIR_NW = Vector3(-1, 1, 0)
 const DIR_ALL = [DIR_N, DIR_NE, DIR_SE, DIR_S, DIR_SW, DIR_NW]
 
 # Allow the user to scale the hex for fake perspective or somesuch
-export(Vector2) var hex_scale = Vector2(1, 1) setget set_hex_scale
+@export var hex_scale := Vector2(1, 1) : set = set_hex_scale
 
 var base_hex_size = Vector2(1, sqrt(3)/2)
 var hex_size
@@ -207,14 +208,14 @@ func get_hex_center(hex):
 	hex = HexCell.new(hex)
 	return hex_transform * hex.axial_coords
 	
-func get_hex_at(coords):
+func get_hex_at(coords) -> HexCell:
 	# Returns a HexCell at the given Vector2/3 on the projection plane
 	# If the given value is a Vector3, its x,z coords will be used
 	if typeof(coords) == TYPE_VECTOR3:
 		coords = Vector2(coords.x, coords.z)
 	return HexCell.new(hex_transform_inv * coords)
 	
-func get_hex_center3(hex, y=0):
+func get_hex_center3(hex, y=0) -> Vector3:
 	# Returns hex's centre position as a Vector3
 	var coords = get_hex_center(hex)
 	return Vector3(coords.x, y, coords.y)
@@ -372,7 +373,7 @@ func find_path(start, goal, exceptions=[]):
 				var priority = next_cost + next_hex.distance_to(goal)
 				# Insert into the frontier
 				var item = make_priority_item(next, priority)
-				var idx = frontier.bsearch_custom(item, self, "comp_priority_item")
+				var idx = frontier.bsearch_custom(item, self.comp_priority_item)
 				frontier.insert(idx, item)
 				came_from[next] = current
 	

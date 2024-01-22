@@ -61,6 +61,7 @@
 
 """
 extends Resource
+class_name HexCell
 #warning-ignore-all:unused_class_variable
 
 # We use unit-size flat-topped hexes
@@ -76,10 +77,10 @@ const DIR_ALL = [DIR_N, DIR_NE, DIR_SE, DIR_S, DIR_SW, DIR_NW]
 
 
 # Cube coords are canonical
-var cube_coords = Vector3(0, 0, 0) setget set_cube_coords, get_cube_coords
+var cube_coords := Vector3(0, 0, 0) : set = set_cube_coords, get = get_cube_coords
 # but other coord systems can be used
-var axial_coords setget set_axial_coords, get_axial_coords
-var offset_coords setget set_offset_coords, get_offset_coords
+var axial_coords : set = set_axial_coords, get = get_axial_coords
+var offset_coords : set = set_offset_coords, get = get_offset_coords
 
 
 func _init(coords=null):
@@ -231,7 +232,7 @@ func line_to(target):
 	var steps = distance_to(target)
 	var path = []
 	for dist in range(steps):
-		var lerped = cube_coords.linear_interpolate(nudged_target, float(dist) / steps)
+		var lerped = cube_coords.lerp(nudged_target, float(dist) / steps)
 		path.append(new_hex(round_coords(lerped)))
 	path.append(new_hex(target))
 	return path
