@@ -88,7 +88,7 @@ func _init(coords=null):
 	if coords:
 		self.cube_coords = obj_to_coords(coords)
 
-func new_hex(coords):
+func new_hex(coords) -> HexCell:
 	# Returns a new HexCell instance
 	return get_script().new(coords)
 
