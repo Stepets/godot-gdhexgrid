@@ -293,7 +293,10 @@ func remove_barriers(vals, dirs=null):
 
 func get_hex_cost(coords):
 	# Returns the cost of moving to the given hex
-	coords = HexCell.new(coords).axial_coords
+	if coords is HexCell:
+		coords = coords.axial_coords
+	else:
+		coords = HexCell.new(coords).axial_coords
 	if coords in path_obstacles:
 		return path_obstacles[coords]
 	if not path_bounds.has_point(coords):
