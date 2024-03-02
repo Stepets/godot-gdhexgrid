@@ -65,157 +65,106 @@ class_name HexCell
 #warning-ignore-all:unused_class_variable
 
 # We use unit-size flat-topped hexes
-const size = Vector2(1, sqrt(3)/2)
+const size := Vector2(1, sqrt(3)/2)
 # Directions of neighbouring cells
-const DIR_N = Vector3(0, 1, -1)
-const DIR_NE = Vector3(1, 0, -1)
-const DIR_SE = Vector3(1, -1, 0)
-const DIR_S = Vector3(0, -1, 1)
-const DIR_SW = Vector3(-1, 0, 1)
-const DIR_NW = Vector3(-1, 1, 0)
-const DIR_ALL = [DIR_N, DIR_NE, DIR_SE, DIR_S, DIR_SW, DIR_NW]
+const DIR_N := Vector3i(0, 1, -1)
+const DIR_NE := Vector3i(1, 0, -1)
+const DIR_SE := Vector3i(1, -1, 0)
+const DIR_S := Vector3i(0, -1, 1)
+const DIR_SW := Vector3i(-1, 0, 1)
+const DIR_NW := Vector3i(-1, 1, 0)
+const DIR_ALL : Array[Vector3i] = [DIR_N, DIR_NE, DIR_SE, DIR_S, DIR_SW, DIR_NW]
 
 
 # Cube coords are canonical
-var cube_coords := Vector3(0, 0, 0) : set = set_cube_coords, get = get_cube_coords
+var cube_coords := Vector3i(0, 0, 0) : set = set_cube_coords, get = get_cube_coords
 # but other coord systems can be used
-var axial_coords : set = set_axial_coords, get = get_axial_coords
+var axial_coords : Vector2i : set = set_axial_coords, get = get_axial_coords
 var offset_coords : set = set_offset_coords, get = get_offset_coords
 
 
-func _init(coords=null):
-	# HexCells can be created with coordinates
-	if coords:
-		self.cube_coords = obj_to_coords(coords)
+func _init(cube_coords : Vector3i = Vector3i.ZERO):
+	self.cube_coords = cube_coords
 
-func new_hex(coords) -> HexCell:
-	# Returns a new HexCell instance
-	return get_script().new(coords)
+static func from_axial(coords : Vector2i) -> HexCell:
+	return HexCell.new(axial_to_cube_coords(coords))
 
-"""
-	Handle coordinate access and conversion
-"""
-func obj_to_coords(val):
-	# Returns suitable cube coordinates for the given object
-	# The given object can an be one of:
-	# * Vector3 of standard cube coords;
-	# * Vector2 of axial coords;
-	# * HexCell instance
-	# Any other type of value will return null
-	#
-	# NB that offset coords are NOT supported, as they are
-	# indistinguishable from axial coords.
-	
-	if typeof(val) == TYPE_VECTOR3:
+static func obj_to_coords(val) -> Vector3i:
+	if typeof(val) == TYPE_VECTOR3I:
 		return val
-	elif typeof(val) == TYPE_VECTOR2:
+	elif typeof(val) == TYPE_VECTOR2I:
 		return axial_to_cube_coords(val)
-	elif typeof(val) == TYPE_OBJECT and val.has_method("get_cube_coords"):
-		return val.get_cube_coords()
-	# Fall through to nothing
-	return
+	assert(false, "HexCell.obj_to_coords accepts only Vector2i|Vector3i")
+	return Vector3i.ZERO
 	
-func axial_to_cube_coords(val):
-	# Returns the Vector3 cube coordinates for an axial Vector2
+static func axial_to_cube_coords(val : Vector2i) -> Vector3i:
 	var x = val.x
 	var y = val.y
-	return Vector3(x, y, -x - y)
+	return Vector3i(x, y, -x - y)
 	
-func round_coords(val):
-	# Rounds floaty coordinate to the nearest whole number cube coords
-	if typeof(val) == TYPE_VECTOR2:
-		val = axial_to_cube_coords(val)
-	
-	# Straight round them
-	var rounded = Vector3(round(val.x), round(val.y), round(val.z))
-	
-	# But recalculate the one with the largest diff so that x+y+z=0
-	var diffs = (rounded - val).abs()
-	if diffs.x > diffs.y and diffs.x > diffs.z:
-		rounded.x = -rounded.y - rounded.z
-	elif diffs.y > diffs.z:
-		rounded.y = -rounded.x - rounded.z
-	else:
-		rounded.z = -rounded.x - rounded.y
-	
-	return rounded
-	
+static func round_cube_coords(coords : Vector3) -> Vector3i:
+	return axial_to_cube_coords(Vector2i(roundi(coords.x), roundi(coords.y)))
 
-func get_cube_coords():
-	# Returns a Vector3 of the cube coordinates
+func get_cube_coords() -> Vector3i:
 	return cube_coords
 	
-func set_cube_coords(val):
-	# Sets the position from a Vector3 of cube coordinates
-	if abs(val.x + val.y + val.z) > 0.0001:
-		print("WARNING: Invalid cube coordinates for hex (x+y+z!=0): ", val)
-		return
-	cube_coords = round_coords(val)
+func set_cube_coords(val : Vector3i) -> void:
+	cube_coords = val
 	
-func get_axial_coords():
-	# Returns a Vector2 of the axial coordinates
-	return Vector2(cube_coords.x, cube_coords.y)
+func get_axial_coords() -> Vector2i:
+	return Vector2i(cube_coords.x, cube_coords.y)
 	
-func set_axial_coords(val):
-	# Sets position from a Vector2 of axial coordinates
+func set_axial_coords(val : Vector2i) -> void:
 	set_cube_coords(axial_to_cube_coords(val))
-	
-func get_offset_coords():
-	# Returns a Vector2 of the offset coordinates
-	var x = int(cube_coords.x)
-	var y = int(cube_coords.y)
-	var off_y = y + (x - (x & 1)) / 2
-	return Vector2(x, off_y)
-	
-func set_offset_coords(val):
-	# Sets position from a Vector2 of offset coordinates
-	var x = int(val.x)
-	var y = int(val.y)
-	var cube_y = y - (x - (x & 1)) / 2
-	self.set_axial_coords(Vector2(x, cube_y))
-	
 
-"""
-	Finding our neighbours
-"""
-func get_adjacent(dir):
-	# Returns a HexCell instance for the given direction from this.
-	# Intended for one of the DIR_* consts, but really any Vector2 or x+y+z==0 Vector3 will do.
-	if typeof(dir) == TYPE_VECTOR2:
-		dir = axial_to_cube_coords(dir)
-	return new_hex(self.cube_coords + dir)
+func axial_with_height(height : int) -> Vector3i:
+	return Vector3i(cube_coords.x, height, cube_coords.y)
 	
-func get_all_adjacent():
+func get_offset_coords() -> Vector2i:
+	var x = cube_coords.x
+	var y = cube_coords.y
+	var off_y = y + (x - (x & 1)) / 2
+	return Vector2i(x, off_y)
+	
+func set_offset_coords(val : Vector2i) -> void:
+	# Sets position from a Vector2 of offset coordinates
+	var x = val.x
+	var y = val.y
+	var cube_y = y - (x - (x & 1)) / 2
+	self.set_axial_coords(Vector2i(x, cube_y))
+
+func get_adjacent(dir : Vector3i) -> HexCell:
+	return HexCell.new(self.cube_coords + dir)
+	
+func get_all_adjacent() -> Array[HexCell]:
 	# Returns an array of HexCell instances representing adjacent locations
-	var cells = Array()
+	var cells : Array[HexCell]
 	for coord in DIR_ALL:
-		cells.append(new_hex(self.cube_coords + coord))
+		cells.append(HexCell.new(self.cube_coords + coord))
 	return cells
 	
-func get_all_within(distance):
+func get_all_within(distance : int) -> Array[HexCell]:
 	# Returns an array of all HexCell instances within the given distance
-	var cells = Array()
+	var cells : Array[HexCell]
 	for dx in range(-distance, distance+1):
 		for dy in range(max(-distance, -distance - dx), min(distance, distance - dx) + 1):
-			cells.append(new_hex(self.axial_coords + Vector2(dx, dy)))
+			cells.append(HexCell.new(axial_to_cube_coords(self.axial_coords + Vector2i(dx, dy))))
 	return cells
 	
-func get_ring(distance):
+func get_ring(distance : int) -> Array[HexCell]:
 	# Returns an array of all HexCell instances at the given distance
 	if distance < 1:
-		return [new_hex(self.cube_coords)]
+		return [self]
 	# Start at the top (+y) and walk in a clockwise circle
-	var cells = Array()
-	var current = new_hex(self.cube_coords + (DIR_N * distance))
+	var cells : Array[HexCell]
+	var current = HexCell.new(self.cube_coords + (DIR_N * distance))
 	for dir in [DIR_SE, DIR_S, DIR_SW, DIR_NW, DIR_N, DIR_NE]:
 		for _step in range(distance):
 			cells.append(current)
 			current = current.get_adjacent(dir)
 	return cells
 	
-func distance_to(target):
-	# Returns the number of hops from this hex to another
-	# Can be passed cube or axial coords, or another HexCell instance
+func distance_to(target) -> int:
 	target = obj_to_coords(target)
 	return int((
 			abs(cube_coords.x - target.x)
@@ -223,17 +172,15 @@ func distance_to(target):
 			+ abs(cube_coords.z - target.z)
 			) / 2)
 	
-func line_to(target):
+func line_to(target) -> Array[HexCell]:
 	# Returns an array of HexCell instances representing
 	# a straight path from here to the target, including both ends
 	target = obj_to_coords(target)
-	# End of our lerp is nudged so it never lands exactly on an edge
-	var nudged_target = target + Vector3(1e-6, 2e-6, -3e-6)
 	var steps = distance_to(target)
 	var path = []
-	for dist in range(steps):
-		var lerped = cube_coords.lerp(nudged_target, float(dist) / steps)
-		path.append(new_hex(round_coords(lerped)))
-	path.append(new_hex(target))
+	var start := Vector3(cube_coords) + Vector3(1e-6, 2e-6, -3e-6)
+	for dist in range(steps + 1):
+		var lerped = start.lerp(target, float(dist) / steps)
+		path.append(HexCell.new(round_cube_coords(lerped)))
 	return path
 	

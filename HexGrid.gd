@@ -156,39 +156,38 @@
 extends RefCounted
 class_name HexGrid
 
-#var HexCell = preload("./HexCell.gd")
 # Duplicate these from HexCell for ease of access
-const DIR_N = Vector3(0, 1, -1)
-const DIR_NE = Vector3(1, 0, -1)
-const DIR_SE = Vector3(1, -1, 0)
-const DIR_S = Vector3(0, -1, 1)
-const DIR_SW = Vector3(-1, 0, 1)
-const DIR_NW = Vector3(-1, 1, 0)
-const DIR_ALL = [DIR_N, DIR_NE, DIR_SE, DIR_S, DIR_SW, DIR_NW]
+const DIR_N := Vector3i(0, 1, -1)
+const DIR_NE := Vector3i(1, 0, -1)
+const DIR_SE := Vector3i(1, -1, 0)
+const DIR_S := Vector3i(0, -1, 1)
+const DIR_SW := Vector3i(-1, 0, 1)
+const DIR_NW := Vector3i(-1, 1, 0)
+const DIR_ALL : Array[Vector3i] = [DIR_N, DIR_NE, DIR_SE, DIR_S, DIR_SW, DIR_NW]
 
 # Allow the user to scale the hex for fake perspective or somesuch
 @export var hex_scale := Vector2(1, 1) : set = set_hex_scale
 
-var base_hex_size = Vector2(1, sqrt(3)/2)
-var hex_size
-var hex_transform
-var hex_transform_inv
+var base_hex_size := Vector2(1, sqrt(3)/2)
+var hex_size : Vector2
+var hex_transform : Transform2D
+var hex_transform_inv : Transform2D
 # Pathfinding obstacles {Vector2: cost}
 # A zero cost means impassable
-var path_obstacles = {}
+var path_obstacles := {}
 # Barriers restrict traversing between edges (in either direction)
 # costs for barriers and obstacles are cumulative, but impassable is impassable
 # {Vector2: {DIR_VECTOR2: cost, ...}}
-var path_barriers = {}
-var path_bounds = Rect2()
-var path_cost_default = 1.0
+var path_barriers := {}
+var path_bounds := Rect2()
+var path_cost_default := 1.0
 
 
 func _init():
 	set_hex_scale(hex_scale)
 
 
-func set_hex_scale(scale):
+func set_hex_scale(scale : Vector2) -> void:
 	# We need to recalculate some stuff when projection scale changes
 	hex_scale = scale
 	hex_size = base_hex_size * hex_scale
@@ -203,21 +202,20 @@ func set_hex_scale(scale):
 """
 	Converting between hex-grid and 2D spatial coordinates
 """
-func get_hex_center(hex):
+func get_hex_center(hex : HexCell) -> Vector2:
 	# Returns hex's centre position on the projection plane
-	hex = HexCell.new(hex)
-	return hex_transform * hex.axial_coords
+	return hex_transform * Vector2(hex.axial_coords)
 	
 func get_hex_at(coords) -> HexCell:
 	# Returns a HexCell at the given Vector2/3 on the projection plane
 	# If the given value is a Vector3, its x,z coords will be used
 	if typeof(coords) == TYPE_VECTOR3:
 		coords = Vector2(coords.x, coords.z)
-	return HexCell.new(hex_transform_inv * coords)
+	return HexCell.new(HexCell.axial_to_cube_coords(Vector2i((hex_transform_inv * coords).round())))
 	
-func get_hex_center3(hex, y=0) -> Vector3:
+func get_hex_center3(hex : HexCell, y=0) -> Vector3:
 	# Returns hex's centre position as a Vector3
-	var coords = get_hex_center(hex)
+	var coords := get_hex_center(hex)
 	return Vector3(coords.x, y, coords.y)
 	
 
@@ -229,44 +227,31 @@ func get_hex_center3(hex, y=0) -> Vector3:
 	We use axial coords for everything internally (to use Rect2.has_point),
 	but the methods accept cube or axial coords, or HexCell instances.
 """
-func set_bounds(min_coords, max_coords):
+func set_bounds(min_coords : Vector2i, max_coords : Vector2i) -> void:
 	# Set the absolute bounds of the pathfinding area in grid coords
 	# The given coords will be inside the boundary (hence the extra (1, 1))
-	min_coords = HexCell.new(min_coords).axial_coords
-	max_coords = HexCell.new(max_coords).axial_coords
-	path_bounds = Rect2(min_coords, (max_coords - min_coords) + Vector2(1, 1))
+	path_bounds = Rect2(min_coords, (max_coords - min_coords) + Vector2i.ONE)
 	
-func get_obstacles():
+func get_obstacles() -> Dictionary:
 	return path_obstacles
 	
-func add_obstacles(vals, cost=0):
+func add_obstacles(vals : Array[Vector2i], cost=0) -> void:
 	# Store the given coordinate/s as obstacles
-	if not typeof(vals) == TYPE_ARRAY:
-		vals = [vals]
 	for coords in vals:
-		coords = HexCell.new(coords).axial_coords
 		path_obstacles[coords] = cost
 	
-func remove_obstacles(vals):
+func remove_obstacles(vals : Array[Vector2i]) -> void:
 	# Remove the given obstacle/s from the grid
-	if not typeof(vals) == TYPE_ARRAY:
-		vals = [vals]
 	for coords in vals:
-		coords = HexCell.new(coords).axial_coords
 		path_obstacles.erase(coords)
 	
-func get_barriers():
+func get_barriers() -> Dictionary:
 	return path_barriers
 	
-func add_barriers(vals, dirs, cost=0):
+func add_barriers(vals : Array[Vector2i], dirs : Array[Vector3i], cost=0) -> void:
 	# Store the given directions of the given locations as barriers
-	if not typeof(vals) == TYPE_ARRAY:
-		vals = [vals]
-	if not typeof(dirs) == TYPE_ARRAY:
-		dirs = [dirs]
 	for coords in vals:
-		coords = HexCell.new(coords).axial_coords
-		var barriers = {}
+		var barriers := {}
 		if coords in path_barriers:
 			# Already something there
 			barriers = path_barriers[coords]
@@ -277,125 +262,109 @@ func add_barriers(vals, dirs, cost=0):
 			barriers[dir] = cost
 		path_barriers[coords] = barriers
 	
-func remove_barriers(vals, dirs=null):
-	if not typeof(vals) == TYPE_ARRAY:
-		vals = [vals]
-	if dirs != null and not typeof(dirs) == TYPE_ARRAY:
-		dirs = [dirs]
+func remove_barriers(vals : Array[Vector2i], dirs=null) -> void:
 	for coords in vals:
-		coords = HexCell.new(coords).axial_coords
 		if dirs == null:
 			path_barriers.erase(coords)
 		else:
 			for dir in dirs:
 				path_barriers[coords].erase(dir)
-	
 
-func get_hex_cost(coords):
-	# Returns the cost of moving to the given hex
+func get_hex_cost(coords) -> float:
 	if coords is HexCell:
 		coords = coords.axial_coords
-	else:
-		coords = HexCell.new(coords).axial_coords
+	
 	if coords in path_obstacles:
 		return path_obstacles[coords]
 	if not path_bounds.has_point(coords):
 		# Out of bounds
 		return 0
 	return path_cost_default
-	
-func get_move_cost(coords, direction):
-	# Returns the cost of moving from one hex to a neighbour
-	direction = HexCell.new(direction).cube_coords
-	var start_hex = HexCell.new(coords)
-	var target_hex = HexCell.new(start_hex.cube_coords + direction)
-	coords = start_hex.axial_coords
-	# First check if either end is completely impassable
-	var cost = get_hex_cost(start_hex)
-	if cost == 0:
-		return 0
-	cost = get_hex_cost(target_hex)
-	if cost == 0:
-		return 0
-	# Check for barriers
-	var barrier_cost
-	if coords in path_barriers and direction in path_barriers[coords]:
-		barrier_cost = path_barriers[coords][direction]
-		if barrier_cost == 0:
-			return 0
-		cost += barrier_cost
-	var target_coords = target_hex.axial_coords
-	if target_coords in path_barriers and -direction in path_barriers[target_coords]:
-		barrier_cost = path_barriers[target_coords][-direction]
-		if barrier_cost == 0:
-			return 0
-		cost += barrier_cost
-	return cost
-	
 
-func get_path(start, goal, exceptions=[]):
-	# DEPRECATED!
-	# The function `get_path` is used by Godot for something completely different,
-	# so we renamed it here to `find_path`.
-	push_warning("HexGrid.get_path has been deprecated, use find_path instead.")
-	return find_path(start, goal, exceptions)
-	
-func find_path(start, goal, exceptions=[]):
-	# Light a starry path from the start to the goal, inclusive
-	start = HexCell.new(start).axial_coords
-	goal = HexCell.new(goal).axial_coords
-	# Make sure all the exceptions are axial coords
-	var exc = []
-	for ex in exceptions:
-		exc.append(HexCell.new(ex).axial_coords)
-	exceptions = exc
-	# Now we begin the A* search
-	var frontier = [make_priority_item(start, 0)]
-	var came_from = {start: null}
-	var cost_so_far = {start: 0}
-	while not frontier.empty():
-		var current = frontier.pop_front().v
-		if current == goal:
-			break
-		for next_hex in HexCell.new(current).get_all_adjacent():
-			var next = next_hex.axial_coords
-			var next_cost = get_move_cost(current, next - current)
-			if next == goal and (next in exceptions or get_hex_cost(next) == 0):
-				# Our goal is an obstacle, but we're next to it
-				# so our work here is done
-				came_from[next] = current
-				frontier.clear()
-				break
-			if not next_cost or next in exceptions:
-				# We shall not pass
-				continue
-			next_cost += cost_so_far[current]
-			if not next in cost_so_far or next_cost < cost_so_far[next]:
-				# New shortest path to that node
-				cost_so_far[next] = next_cost
-				var priority = next_cost + next_hex.distance_to(goal)
-				# Insert into the frontier
-				var item = make_priority_item(next, priority)
-				var idx = frontier.bsearch_custom(item, self.comp_priority_item)
-				frontier.insert(idx, item)
-				came_from[next] = current
-	
-	if not goal in came_from:
-		# Not found
-		return []
-	# Follow the path back where we came_from
-	var path = []
-	if not (get_hex_cost(goal) == 0 or goal in exceptions):
-		# We only include the goal if it's traversable
-		path.append(HexCell.new(goal))
-	var current = goal
-	while current != start:
-		current = came_from[current]
-		path.push_front(HexCell.new(current))
-	return path
-	
-# Used to make a priority queue out of an array
-func make_priority_item(val, priority):
-	return {"v": val, "p": priority}
-func comp_priority_item(a, b):
-	return a.p < b.p
+#func get_move_cost(coords, direction):
+	## Returns the cost of moving from one hex to a neighbour
+	#direction = HexCell.new(direction).cube_coords
+	#var start_hex = HexCell.new(coords)
+	#var target_hex = HexCell.new(start_hex.cube_coords + direction)
+	#coords = start_hex.axial_coords
+	## First check if either end is completely impassable
+	##var cost = get_hex_cost(start_hex)
+	##if cost == 0:
+		##return 0
+	#var cost = get_hex_cost(target_hex)
+	#if cost == 0:
+		#return 0
+	## Check for barriers
+	#var barrier_cost
+	#if coords in path_barriers and direction in path_barriers[coords]:
+		#barrier_cost = path_barriers[coords][direction]
+		#if barrier_cost == 0:
+			#return 0
+		#cost += barrier_cost
+	#var target_coords = target_hex.axial_coords
+	#if target_coords in path_barriers and -direction in path_barriers[target_coords]:
+		#barrier_cost = path_barriers[target_coords][-direction]
+		#if barrier_cost == 0:
+			#return 0
+		#cost += barrier_cost
+	#return cost
+#
+#func find_path(start, goal, exceptions=[]) -> Array:
+	## Light a starry path from the start to the goal, inclusive
+	#start = HexCell.new(start).axial_coords
+	#goal = HexCell.new(goal).axial_coords
+	## Make sure all the exceptions are axial coords
+	#var exc = []
+	#for ex in exceptions:
+		#exc.append(HexCell.new(ex).axial_coords)
+	#exceptions = exc
+	## Now we begin the A* search
+	#var frontier = [make_priority_item(start, 0)]
+	#var came_from = {start: null}
+	#var cost_so_far = {start: 0}
+	#while not frontier.is_empty():
+		#var current = frontier.pop_front().v
+		#if current == goal:
+			#break
+		#for next_hex in HexCell.new(current).get_all_adjacent():
+			#var next = next_hex.axial_coords
+			#var next_cost = get_move_cost(current, next - current)
+			#if next == goal and (next in exceptions or get_hex_cost(next) == 0):
+				## Our goal is an obstacle, but we're next to it
+				## so our work here is done
+				#came_from[next] = current
+				#frontier.clear()
+				#break
+			#if not next_cost or next in exceptions:
+				## We shall not pass
+				#continue
+			#next_cost += cost_so_far[current]
+			#if not next in cost_so_far or next_cost < cost_so_far[next]:
+				## New shortest path to that node
+				#cost_so_far[next] = next_cost
+				#var priority = next_cost + next_hex.distance_to(goal)
+				## Insert into the frontier
+				#var item = make_priority_item(next, priority)
+				#var idx = frontier.bsearch_custom(item, self.comp_priority_item)
+				#frontier.insert(idx, item)
+				#came_from[next] = current
+	#
+	#if not goal in came_from:
+		## Not found
+		#return []
+	## Follow the path back where we came_from
+	#var path = []
+	#if not (get_hex_cost(goal) == 0 or goal in exceptions):
+		## We only include the goal if it's traversable
+		#path.append(HexCell.new(goal))
+	#var current = goal
+	#while current != start:
+		#current = came_from[current]
+		#path.push_front(HexCell.new(current))
+	#return path
+	#
+## Used to make a priority queue out of an array
+#func make_priority_item(val, priority):
+	#return {"v": val, "p": priority}
+#func comp_priority_item(a, b):
+	#return a.p < b.p
